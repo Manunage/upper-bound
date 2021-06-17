@@ -1,15 +1,10 @@
 from nuscenes import NuScenes
-import os
-import os.path as osp
-import numpy as np
 
+# import os
+# import os.path as osp
+# import numpy as np
 
-script_path = osp.dirname(__file__)
-rel_data_path = '/data/sets/nuscenes'
-dataroot = script_path + rel_data_path
-
-# nusc = NuScenes(version='v1.0-mini', dataroot=dataroot, verbose=True)
-
+nusc = NuScenes(version='v1.0-mini', dataroot='/data/sets/nuscenes', verbose=True)
 
 #################
 # playing around with nuscenes schema
@@ -27,14 +22,21 @@ dataroot = script_path + rel_data_path
 #print(first_sample_data)
 #next_sample_token = first_sample_data['next']
 #print(next_sample_token)
+
+
 #################
 
 
 # access pointclouds by traversing sample_data and filtering for 'pcd' datatype
 def get_pointclouds():
+    do = True
     for data in nusc.sample_data:
         if data['fileformat'] == 'pcd':
             # do something with pointclouds here, e.g. access file at path data['filename']
-            pass
+            print(data)
+            sample = nusc.get('sample', data['sample_token'])
+            print(sample)
+            do = False
+
 
 get_pointclouds()
