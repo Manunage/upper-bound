@@ -29,14 +29,12 @@ nusc = NuScenes(version='v1.0-mini', dataroot='/data/sets/nuscenes', verbose=Tru
 
 # access pointclouds by traversing sample_data and filtering for 'pcd' datatype
 def get_pointclouds():
-    do = True
     for data in nusc.sample_data:
         if data['fileformat'] == 'pcd':
             # do something with pointclouds here, e.g. access file at path data['filename']
             print(data)
             sample = nusc.get('sample', data['sample_token'])
             print(sample)
-            do = False
 
 
 get_pointclouds()
