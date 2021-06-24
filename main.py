@@ -22,6 +22,8 @@ nusc = NuScenes(version='v1.0-mini', dataroot='/data/sets/nuscenes', verbose=Tru
 #print(first_sample_data)
 #next_sample_token = first_sample_data['next']
 #print(next_sample_token)
+for sample_annotation in nusc.sample_annotation:
+    print(sample_annotation)
 
 
 #################

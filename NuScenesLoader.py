@@ -1,4 +1,7 @@
 from nuscenes import NuScenes
+from nuscenes.eval.common.data_classes import EvalBoxes
+from nuscenes.eval.detection.data_classes import DetectionBox
+from nuscenes.eval.common.loaders import load_gt
 import os
 import os.path as osp
 import numpy as np
@@ -26,27 +29,25 @@ class NuScenesLoader(data.Dataset):
         self.num_points = num_points
         if mini_testrun:
             self.dataset = NuScenes(version='v1.0-mini', dataroot=self.root, verbose=True)
-            f = h5py.File('pointcloud_data.h5', 'w')
-            mini_data = f.create_dataset("unlimited", (10000, 2), maxshape=(None, 10))
-            #TODO get pointclouds into dataset
-            for sample_data in self.dataset.sample_data:
-                if sample_data['fileformat'] == 'pcd' and sample_data['is_key_frame']:
-                    print(sample_data)
-                    file = sample_data['filename']
-                    print(file)
-                    # pcd = o3d.io.read_point_cloud(pcd_file)
-                    # out_arr = np.asarray(pcd.points)
         else:
             #TODO prepare train and test datasets here
             pass
 
     def __getitem__(self, idx):
-        sample = self.dataset.sample[idx]
+        annotation = self.dataset.sample_annotation[idx]
+        print(annotation)
+        sample = self.dataset.get('sample', annotation['sample_token'])
+        print(sample)
+        if annotation['num_lidar_pts'] > 0:
+            pass
+        if annotation['num_radar_pts'] > 0:
+            pass
 
-    # Return number of samples
-    # TODO Maybe return number of instances? Or something else?
+        return annotation
+
+    # TODO Return number of annotations
     def __len__(self):
-        return len(self.dataset.sample)
+        return len(self.dataset.sample_annotation)
 
     def set_num_points(self, pts):
         self.num_points = min(int(1e4), pts)
@@ -54,4 +55,7 @@ class NuScenesLoader(data.Dataset):
 
 dataset = NuScenesLoader(16, train=True)
 
-print(len(dataset))
+#print(dataset[46])
+boxes = load_gt(nusc=dataset.dataset, eval_split='mini_train', box_cls=DetectionBox, verbose=True)
+for b in boxes:
+    print(b)
