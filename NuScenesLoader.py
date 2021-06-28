@@ -38,9 +38,8 @@ class NuScenesLoader(data.Dataset):
             pass
 
     def __getitem__(self, idx):
-        # TODO need to get corresponding sample_annotation_token for this box, but only sample_token available :(
-        box = self.boxes.all[idx]
-        sample_data_tokens = self.dataset.get('sample', box.sample_token)['data']
+        annotation = self.dataset.sample_annotation[idx]
+        sample_data_tokens = self.dataset.get('sample', annotation['sample_token'])['data']
         sensors = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT', 'LIDAR_TOP']
         all_points = []
         for sensor_name in sensors:
@@ -54,16 +53,14 @@ class NuScenesLoader(data.Dataset):
             for point_data in pointcloud.points:
                 all_points.append(point_data[:3])
 
-        # TODO EvalBoxes is not the same as Box that needs to go into points_in_box! Convert somehow?
-        # TODO Try this instead for boxes:
-        #  https://github.com/nutonomy/nuscenes-devkit/blob/9b209638ef3dee6d0cdc5ac700c493747f5b35fe/python-sdk/nuscenes/nuscenes.py#L239
-        filter_mask = points_in_box(box, all_points)
+        # TODO all_points has wrong dimensions for points_in_box. Tranpose? Maybe needs to be ndarray, not list.
+        filter_mask = points_in_box(box=self.dataset.get_box(annotation['token']), points=all_points)
         filtered_points = all_points[filter_mask]
-        label = box.detection_name
+        label = annotation['category_name']
         return filtered_points, label
 
     def __len__(self):
-        return len(self.boxes.all)
+        return len(self.dataset.sample_annotation)
 
     def set_num_points(self, pts):
         self.num_points = min(int(1e4), pts)
