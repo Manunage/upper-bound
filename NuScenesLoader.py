@@ -1,4 +1,6 @@
 from nuscenes import NuScenes
+from nuscenes.utils.data_classes import LidarPointCloud, RadarPointCloud, Box
+from nuscenes.utils.geometry_utils import points_in_box
 from nuscenes.eval.common.data_classes import EvalBoxes
 from nuscenes.eval.detection.data_classes import DetectionBox
 from nuscenes.eval.common.loaders import load_gt
@@ -13,6 +15,7 @@ import h5py
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 rel_data_path = '/data/sets/nuscenes'
 dataroot = BASE_DIR + rel_data_path
+print(BASE_DIR)
 print(dataroot)
 
 
@@ -28,23 +31,37 @@ class NuScenesLoader(data.Dataset):
         if mini_testrun:
             self.dataset = NuScenes(version='v1.0-mini', dataroot=dataroot, verbose=True)
             if train:
+                # TODO maybe not use load_gt and instead go directly by self.dataset.annotation
                 self.boxes = load_gt(nusc=self.dataset, eval_split='mini_train', box_cls=DetectionBox, verbose=True)
         else:
             #TODO load train and test datasets here
             pass
 
     def __getitem__(self, idx):
-        return self.boxes.all[idx] # TODO delete this later
+        # TODO need to get corresponding sample_annotation_token for this box, but only sample_token available :(
+        box = self.boxes.all[idx]
+        sample_data_tokens = self.dataset.get('sample', box.sample_token)['data']
+        sensors = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT', 'LIDAR_TOP']
+        all_points = []
+        for sensor_name in sensors:
+            sample_data = self.dataset.get('sample_data', sample_data_tokens[sensor_name])
+            filename = sample_data['filename']
+            if sample_data['sensor_modality'] == 'radar':
+                pointcloud = RadarPointCloud.from_file(osp.join(dataroot, filename))
+            elif sample_data['sensor_modality'] == 'lidar':
+                pointcloud = LidarPointCloud.from_file(osp.join(dataroot, filename))
+            # Get only first 3 dimensions (coordinates)
+            for point_data in pointcloud.points:
+                all_points.append(point_data[:3])
 
-        # TODO get partial pcd (filter for points in box)
-        box = self.boxes[idx]
-        sample_data = self.dataset.get('sample', box.sample_token)['data']
-        #points =
-        pcd = filter_points(box, points)
+        # TODO EvalBoxes is not the same as Box that needs to go into points_in_box! Convert somehow?
+        # TODO Try this instead for boxes:
+        #  https://github.com/nutonomy/nuscenes-devkit/blob/9b209638ef3dee6d0cdc5ac700c493747f5b35fe/python-sdk/nuscenes/nuscenes.py#L239
+        filter_mask = points_in_box(box, all_points)
+        filtered_points = all_points[filter_mask]
         label = box.detection_name
-        return pcd, label
+        return filtered_points, label
 
-    # TODO Return number of annotations (boxes)
     def __len__(self):
         return len(self.boxes.all)
 
