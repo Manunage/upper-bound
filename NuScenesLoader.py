@@ -34,13 +34,14 @@ class NuScenesLoader(data.Dataset):
                 # TODO maybe not use load_gt and instead go directly by self.dataset.annotation
                 self.boxes = load_gt(nusc=self.dataset, eval_split='mini_train', box_cls=DetectionBox, verbose=True)
         else:
-            #TODO load train and test datasets here
+            # TODO load train and test datasets here
             pass
 
     def __getitem__(self, idx):
         annotation = self.dataset.sample_annotation[idx]
         sample_data_tokens = self.dataset.get('sample', annotation['sample_token'])['data']
-        sensors = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT', 'LIDAR_TOP']
+        sensors = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT',
+                   'LIDAR_TOP']
         all_points = []
         for sensor_name in sensors:
             sample_data = self.dataset.get('sample_data', sample_data_tokens[sensor_name])
@@ -54,8 +55,11 @@ class NuScenesLoader(data.Dataset):
                 all_points.append(point_data[:3])
 
         # TODO all_points has wrong dimensions for points_in_box. Tranpose? Maybe needs to be ndarray, not list.
-        filter_mask = points_in_box(box=self.dataset.get_box(annotation['token']), points=all_points)
-        filtered_points = all_points[filter_mask]
+        all_points = np.transpose(all_points)
+        # TODO use get_sample_data and extract box !
+        box = self.dataset.get_box(annotation['token'])
+        filter_mask = points_in_box(box=box, points=all_points)
+        filtered_points = all_points[:, filter_mask]
         label = annotation['category_name']
         return filtered_points, label
 
@@ -67,5 +71,9 @@ class NuScenesLoader(data.Dataset):
 
 
 dataset = NuScenesLoader(16, train=True)
+
+# TODO find number of empty boxes
+
+print(dataset[42])
 
 print(dataset.boxes.__repr__)
