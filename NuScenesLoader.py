@@ -54,7 +54,6 @@ class NuScenesLoader(data.Dataset):
             for point_data in pointcloud.points:
                 all_points.append(point_data[:3])
 
-        # TODO all_points has wrong dimensions for points_in_box. Tranpose? Maybe needs to be ndarray, not list.
         all_points = np.transpose(all_points)
         # TODO use get_sample_data and extract box !
         box = self.dataset.get_box(annotation['token'])
@@ -72,8 +71,29 @@ class NuScenesLoader(data.Dataset):
 
 dataset = NuScenesLoader(16, train=True)
 
-# TODO find number of empty boxes
+# Prints stats about boxes without any points in them
+if True:
+    number_of_boxes = len(dataset.dataset.sample_annotation)
+    num_boxes_without_lidar = 0
+    num_boxes_without_radar = 0
+    num_boxes_without_any = 0
+    for annotation in dataset.dataset.sample_annotation:
+        if annotation['num_lidar_pts'] == 0 and annotation['num_radar_pts'] == 0:
+            num_boxes_without_any += 1
+            num_boxes_without_radar += 1
+            num_boxes_without_lidar += 1
+        elif annotation['num_lidar_pts'] == 0:
+            num_boxes_without_lidar += 1
+        elif annotation['num_radar_pts'] == 0:
+            num_boxes_without_radar += 1
+
+    print('There are {} annotations total.'.format(number_of_boxes))
+    print('There are {} annotations without any lidar points.'.format(num_boxes_without_lidar))
+    print('There are {} annotations without any radar points.'.format(num_boxes_without_radar))
+    print('{} annotations contain no points at all!'.format(num_boxes_without_any))
 
 print(dataset[42])
+
+print(dataset.dataset.sample_annotation[0])
 
 print(dataset.boxes.__repr__)
