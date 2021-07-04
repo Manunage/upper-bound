@@ -18,6 +18,8 @@ dataroot = BASE_DIR + rel_data_path
 print(BASE_DIR)
 print(dataroot)
 
+show_empty_boxes_stats = False
+
 
 # references: https://pytorch.org/tutorials/beginner/basics/data_tutorial.html
 #             https://github.com/erikwijmans/Pointnet2_PyTorch/tree/master/pointnet2/data
@@ -32,14 +34,15 @@ class NuScenesLoader(data.Dataset):
             self.dataset = NuScenes(version='v1.0-mini', dataroot=dataroot, verbose=True)
             if train:
                 # TODO maybe not use load_gt and instead go directly by self.dataset.annotation
-                self.boxes = load_gt(nusc=self.dataset, eval_split='mini_train', box_cls=DetectionBox, verbose=True)
+                # self.boxes = load_gt(nusc=self.dataset, eval_split='mini_train', box_cls=DetectionBox, verbose=True)
+                pass
         else:
             # TODO load train and test datasets here
             pass
 
     def __getitem__(self, idx):
-        annotation = self.dataset.sample_annotation[idx]
-        sample_data_tokens = self.dataset.get('sample', annotation['sample_token'])['data']
+        this_annotation = self.dataset.sample_annotation[idx]
+        sample_data_tokens = self.dataset.get('sample', this_annotation['sample_token'])['data']
         sensors = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT',
                    'LIDAR_TOP']
         all_points = []
@@ -55,11 +58,26 @@ class NuScenesLoader(data.Dataset):
                 all_points.append(point_data[:3])
 
         all_points = np.transpose(all_points)
-        # TODO use get_sample_data and extract box !
-        box = self.dataset.get_box(annotation['token'])
+
+        # TODO filtered points is still empty for unknown reasons
+
+        # Version with get_sample_data (preference)
+        _, boxes, _ = self.dataset.get_sample_data(sample_data_token=sample_data_tokens['LIDAR_TOP'],
+                                                   selected_anntokens=[this_annotation['token']],
+                                                   use_flat_vehicle_coordinates=True) # TODO false?
+        box = boxes[0]
+        # Version with get_box:
+        # box = self.dataset.get_box(this_annotation['token'])
+
         filter_mask = points_in_box(box=box, points=all_points)
         filtered_points = all_points[:, filter_mask]
-        label = annotation['category_name']
+
+        # test
+        print(len(all_points[0]))
+        print(len(filtered_points[0]))
+        # --------------
+
+        label = this_annotation['category_name']
         return filtered_points, label
 
     def __len__(self):
@@ -69,15 +87,13 @@ class NuScenesLoader(data.Dataset):
         self.num_points = min(int(1e4), pts)
 
 
-dataset = NuScenesLoader(16, train=True)
-
 # Prints stats about boxes without any points in them
-if True:
-    number_of_boxes = len(dataset.dataset.sample_annotation)
+def print_empty_boxes_stats(dset):
+    number_of_boxes = len(dset.dataset.sample_annotation)
     num_boxes_without_lidar = 0
     num_boxes_without_radar = 0
     num_boxes_without_any = 0
-    for annotation in dataset.dataset.sample_annotation:
+    for annotation in dset.dataset.sample_annotation:
         if annotation['num_lidar_pts'] == 0 and annotation['num_radar_pts'] == 0:
             num_boxes_without_any += 1
             num_boxes_without_radar += 1
@@ -86,14 +102,12 @@ if True:
             num_boxes_without_lidar += 1
         elif annotation['num_radar_pts'] == 0:
             num_boxes_without_radar += 1
-
     print('There are {} annotations total.'.format(number_of_boxes))
     print('There are {} annotations without any lidar points.'.format(num_boxes_without_lidar))
     print('There are {} annotations without any radar points.'.format(num_boxes_without_radar))
     print('{} annotations contain no points at all!'.format(num_boxes_without_any))
 
-print(dataset[42])
 
-print(dataset.dataset.sample_annotation[0])
+dataset = NuScenesLoader(16, train=True)
 
-print(dataset.boxes.__repr__)
+# print_empty_boxes_stats(dataset)
