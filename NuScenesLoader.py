@@ -64,7 +64,7 @@ class NuScenesLoader(data.Dataset):
         # Version with get_sample_data (preference)
         _, boxes, _ = self.dataset.get_sample_data(sample_data_token=sample_data_tokens['LIDAR_TOP'],
                                                    selected_anntokens=[this_annotation['token']],
-                                                   use_flat_vehicle_coordinates=True) # TODO false?
+                                                   use_flat_vehicle_coordinates=True)  # TODO false?
         box = boxes[0]
         # Version with get_box:
         # box = self.dataset.get_box(this_annotation['token'])
