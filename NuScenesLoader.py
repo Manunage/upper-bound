@@ -40,45 +40,40 @@ class NuScenesLoader(data.Dataset):
             # TODO load train and test datasets here
             pass
 
+
     def __getitem__(self, idx):
         this_annotation = self.dataset.sample_annotation[idx]
         sample_data_tokens = self.dataset.get('sample', this_annotation['sample_token'])['data']
         sensors = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT',
                    'LIDAR_TOP']
-        all_points = []
+        # all_points = []
         for sensor_name in sensors:
             sample_data = self.dataset.get('sample_data', sample_data_tokens[sensor_name])
+            # Get box (sensor coordinate frame)
+            _, boxes, _ = self.dataset.get_sample_data(sample_data_token=sample_data_tokens[sensor_name],
+                                                       selected_anntokens=[this_annotation['token']])
+            box = boxes[0]
             filename = sample_data['filename']
+            # Get points (sensor coordinate frame?)
             if sample_data['sensor_modality'] == 'radar':
                 pointcloud = RadarPointCloud.from_file(osp.join(dataroot, filename))
             elif sample_data['sensor_modality'] == 'lidar':
                 pointcloud = LidarPointCloud.from_file(osp.join(dataroot, filename))
-            # Get only first 3 dimensions (coordinates)
-            for point_data in pointcloud.points:
-                all_points.append(point_data[:3])
 
-        all_points = np.transpose(all_points)
-
-        # TODO filtered points is still empty for unknown reasons
-
-        # Version with get_sample_data (preference)
-        _, boxes, _ = self.dataset.get_sample_data(sample_data_token=sample_data_tokens['LIDAR_TOP'],
-                                                   selected_anntokens=[this_annotation['token']],
-                                                   use_flat_vehicle_coordinates=True)  # TODO false?
-        box = boxes[0]
-        # Version with get_box:
-        # box = self.dataset.get_box(this_annotation['token'])
-
-        filter_mask = points_in_box(box=box, points=all_points)
-        filtered_points = all_points[:, filter_mask]
-
-        # test
-        print(len(all_points[0]))
-        print(len(filtered_points[0]))
-        # --------------
+            # transpose for points_in_box and get only first 3 dimensions (coordinates) and
+            points_with_metadata = np.transpose(pointcloud.points)
+            points = []
+            for point_data in points_with_metadata:
+                points.append(point_data[:3])
+            points = np.transpose(points)
+            filter_mask = points_in_box(box=box, points=points)
+            filtered_points = points[:, filter_mask]
+            print(filtered_points)
+            # TODO Works for sensors individually. Transform each to ego pose to get common frame?
 
         label = this_annotation['category_name']
         return filtered_points, label
+
 
     def __len__(self):
         return len(self.dataset.sample_annotation)
