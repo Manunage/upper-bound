@@ -10,15 +10,12 @@ import numpy as np
 import torch
 import torch.utils.data as data
 from pyquaternion import Quaternion
-from matplotlib.axes import Axes
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 rel_data_path = '/data/sets/nuscenes'
 dataroot = BASE_DIR + rel_data_path
 print(BASE_DIR)
 print(dataroot)
-
-show_empty_boxes_stats = False
 
 
 # references: https://pytorch.org/tutorials/beginner/basics/data_tutorial.html
@@ -80,12 +77,16 @@ class NuScenesLoader(data.Dataset):
             # filter for points in box
             filter_mask = points_in_box(box=box, points=points)
             filtered_points = points[:, filter_mask]
-            # print(filtered_points)
+            print(sensor_name)
+            print(filtered_points)
 
             # add points from this sensor to the points from the other sensors (in ego pose frame)
             for point in range(len(filtered_points[0])):
                 for dimension in range(len(filtered_points)):
                     points_ego_frame[dimension].append(filtered_points[dimension][point])
+
+        # TODO make radar/lidar distinguishable
+        # add 3 dimensions radar/lidar, intensity, velocity
 
         label = this_annotation['category_name']
         return points_ego_frame, label
