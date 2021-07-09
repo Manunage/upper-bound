@@ -9,8 +9,8 @@ import os.path as osp
 import numpy as np
 import torch
 import torch.utils.data as data
-import open3d as o3d
-import h5py
+from pyquaternion import Quaternion
+from matplotlib.axes import Axes
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 rel_data_path = '/data/sets/nuscenes'
@@ -40,40 +40,55 @@ class NuScenesLoader(data.Dataset):
             # TODO load train and test datasets here
             pass
 
-
     def __getitem__(self, idx):
         this_annotation = self.dataset.sample_annotation[idx]
         sample_data_tokens = self.dataset.get('sample', this_annotation['sample_token'])['data']
         sensors = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT',
                    'LIDAR_TOP']
-        # all_points = []
+
+        points_ego_frame = [[], [], []]
         for sensor_name in sensors:
-            sample_data = self.dataset.get('sample_data', sample_data_tokens[sensor_name])
+            this_sample_data = self.dataset.get('sample_data', sample_data_tokens[sensor_name])
+            this_calibrated_sensor = self.dataset.get('calibrated_sensor', this_sample_data['calibrated_sensor_token'])
+
             # Get box (sensor coordinate frame)
             _, boxes, _ = self.dataset.get_sample_data(sample_data_token=sample_data_tokens[sensor_name],
                                                        selected_anntokens=[this_annotation['token']])
             box = boxes[0]
-            filename = sample_data['filename']
-            # Get points (sensor coordinate frame?)
-            if sample_data['sensor_modality'] == 'radar':
+
+            # Transform box from sensor coordinate frame to ego pose frame
+            box.rotate(Quaternion(this_calibrated_sensor['rotation']))
+            box.translate(np.array(this_calibrated_sensor['translation']))
+
+            # Get points (sensor coordinate frame)
+            filename = this_sample_data['filename']
+            if this_sample_data['sensor_modality'] == 'radar':
                 pointcloud = RadarPointCloud.from_file(osp.join(dataroot, filename))
-            elif sample_data['sensor_modality'] == 'lidar':
+            elif this_sample_data['sensor_modality'] == 'lidar':
                 pointcloud = LidarPointCloud.from_file(osp.join(dataroot, filename))
 
-            # transpose for points_in_box and get only first 3 dimensions (coordinates) and
+            # Transform pointcloud from sensor coordinate frame to ego pose frame
+            pointcloud.rotate(Quaternion(this_calibrated_sensor['rotation']).rotation_matrix)
+            pointcloud.translate(np.array(this_calibrated_sensor['translation']))
+
+            # transpose for points_in_box and get only first 3 dimensions (coordinates)
             points_with_metadata = np.transpose(pointcloud.points)
             points = []
             for point_data in points_with_metadata:
                 points.append(point_data[:3])
             points = np.transpose(points)
+            # filter for points in box
             filter_mask = points_in_box(box=box, points=points)
             filtered_points = points[:, filter_mask]
-            print(filtered_points)
-            # TODO Works for sensors individually. Transform each to ego pose to get common frame?
+            # print(filtered_points)
+
+            # add points from this sensor to the points from the other sensors (in ego pose frame)
+            for point in range(len(filtered_points[0])):
+                for dimension in range(len(filtered_points)):
+                    points_ego_frame[dimension].append(filtered_points[dimension][point])
 
         label = this_annotation['category_name']
-        return filtered_points, label
-
+        return points_ego_frame, label
 
     def __len__(self):
         return len(self.dataset.sample_annotation)
