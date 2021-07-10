@@ -35,7 +35,10 @@ class NuScenesLoader(data.Dataset):
                 # self.boxes = load_gt(nusc=self.dataset, eval_split='mini_train', box_cls=DetectionBox, verbose=True)
                 pass
         else:
-            # TODO load train and test datasets here
+            if train:
+                self.dataset = NuScenes(version='v1.0-trainval', dataroot=dataroot, verbose=True)
+            else:
+                self.dataset = NuScenes(version='v1.0-test', dataroot=dataroot, verbose=True)
             pass
 
     def __getitem__(self, idx):
@@ -101,7 +104,7 @@ class NuScenesLoader(data.Dataset):
 
 # Prints stats about boxes without any points in them
 def print_empty_boxes_stats(dset):
-    number_of_boxes = len(dset.dataset.sample_annotation)
+    num_boxes = len(dset.dataset.sample_annotation)
     num_boxes_without_lidar = 0
     num_boxes_without_radar = 0
     num_boxes_without_any = 0
@@ -114,10 +117,13 @@ def print_empty_boxes_stats(dset):
             num_boxes_without_lidar += 1
         elif annotation['num_radar_pts'] == 0:
             num_boxes_without_radar += 1
-    print('There are {} annotations total.'.format(number_of_boxes))
+    print('There are {} annotations total.'.format(num_boxes))
     print('There are {} annotations without any lidar points.'.format(num_boxes_without_lidar))
+    print('That means the ratio of annotations without any lidar points to total annotations is {}'.format(num_boxes_without_lidar/num_boxes))
     print('There are {} annotations without any radar points.'.format(num_boxes_without_radar))
+    print('That means the ratio of annotations without any radar points to total annotations is {}'.format(num_boxes_without_radar/num_boxes))
     print('{} annotations contain no points at all!'.format(num_boxes_without_any))
+    print('That means the ratio of annotations without any points to total annotations is {}'.format(num_boxes_without_any/num_boxes))
 
 
 dataset = NuScenesLoader(16, train=True)
