@@ -47,7 +47,8 @@ class NuScenesLoader(data.Dataset):
         sensors = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT',
                    'LIDAR_TOP']
 
-        points_ego_frame = [[], [], []]
+        # FIELDS x y z rad/lid intensity vx vy
+        points_ego_frame = [[], [], [], [], [], [], []]
         for sensor_name in sensors:
             this_sample_data = self.dataset.get('sample_data', sample_data_tokens[sensor_name])
             this_calibrated_sensor = self.dataset.get('calibrated_sensor', this_sample_data['calibrated_sensor_token'])
@@ -81,6 +82,7 @@ class NuScenesLoader(data.Dataset):
             # filter for points in box
             filter_mask = points_in_box(box=box, points=points)
             filtered_points = points[:, filter_mask]
+
             print(sensor_name)
             print(filtered_points)
 
@@ -89,8 +91,13 @@ class NuScenesLoader(data.Dataset):
                 for dimension in range(len(filtered_points)):
                     points_ego_frame[dimension].append(filtered_points[dimension][point])
 
-        # TODO make radar/lidar distinguishable
-        # add 3 dimensions radar/lidar, intensity, velocity
+
+        # TODO Make radar/lidar distinguishable
+        #   Add 4 dimensions:
+        #   radar/lidar (encoded with 0/1)
+        #   intensity (for lidar)
+        #   vx (vx_comp)
+        #   vy (vy_comp: velocities for radar. Directions probably need to be adjusted for ego frame)
 
         label = this_annotation['category_name']
         return points_ego_frame, label
