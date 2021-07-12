@@ -2,13 +2,9 @@ import os
 import os.path as osp
 
 import numpy as np
-import torch
 import torch.utils.data as data
 from nuscenes import NuScenes
-from nuscenes.eval.common.data_classes import EvalBoxes
-from nuscenes.eval.common.loaders import load_gt
-from nuscenes.eval.detection.data_classes import DetectionBox
-from nuscenes.utils.data_classes import LidarPointCloud, RadarPointCloud, Box
+from nuscenes.utils.data_classes import LidarPointCloud, RadarPointCloud
 from nuscenes.utils.geometry_utils import points_in_box
 from pyquaternion import Quaternion
 
@@ -31,8 +27,6 @@ class NuScenesLoader(data.Dataset):
         if mini_testrun:
             self.dataset = NuScenes(version='v1.0-mini', dataroot=dataroot, verbose=True)
             if train:
-                # TODO maybe not use load_gt and instead go directly by self.dataset.annotation
-                # self.boxes = load_gt(nusc=self.dataset, eval_split='mini_train', box_cls=DetectionBox, verbose=True)
                 pass
         else:
             if train:
@@ -48,6 +42,7 @@ class NuScenesLoader(data.Dataset):
                    'LIDAR_TOP']
 
         # FIELDS x y z rad/lid intensity vx vy
+        # TODO Maybe points_ego_frame as record array?
         points_ego_frame = [[], [], [], [], [], [], []]
         for sensor_name in sensors:
             this_sample_data = self.dataset.get('sample_data', sample_data_tokens[sensor_name])
@@ -66,12 +61,21 @@ class NuScenesLoader(data.Dataset):
             filename = this_sample_data['filename']
             if this_sample_data['sensor_modality'] == 'radar':
                 pointcloud = RadarPointCloud.from_file(osp.join(dataroot, filename))
-            elif this_sample_data['sensor_modality'] == 'lidar':
+                is_lidar = 0
+            else:
                 pointcloud = LidarPointCloud.from_file(osp.join(dataroot, filename))
+                is_lidar = 1
 
             # Transform pointcloud from sensor coordinate frame to ego pose frame
-            pointcloud.rotate(Quaternion(this_calibrated_sensor['rotation']).rotation_matrix)
+            rotation_matrix = Quaternion(this_calibrated_sensor['rotation']).rotation_matrix
+            pointcloud.rotate(rotation_matrix)
             pointcloud.translate(np.array(this_calibrated_sensor['translation']))
+
+            # Rotate velocities to ego pose frame (for radar)
+            if not is_lidar:
+                velocities = pointcloud.points[8:10, :]
+                velocities = np.vstack((velocities, np.zeros(pointcloud.points.shape[1])))
+                pointcloud.points[8:10, :] = np.dot(rotation_matrix, velocities)[:2]
 
             # transpose for points_in_box and get only first 3 dimensions (coordinates)
             points_with_metadata = np.transpose(pointcloud.points)
@@ -81,23 +85,25 @@ class NuScenesLoader(data.Dataset):
             points = np.transpose(points)
             # filter for points in box
             filter_mask = points_in_box(box=box, points=points)
-            filtered_points = points[:, filter_mask]
+            filtered_points = pointcloud.points[:, filter_mask]
 
-            print(sensor_name)
-            print(filtered_points)
+            # print(sensor_name)
+            # print(filtered_points)
 
             # add points from this sensor to the points from the other sensors (in ego pose frame)
+            # points_ego_frame FIELDS: x y z rad/lid intensity vx vy
             for point in range(len(filtered_points[0])):
-                for dimension in range(len(filtered_points)):
-                    points_ego_frame[dimension].append(filtered_points[dimension][point])
-
-
-        # TODO Make radar/lidar distinguishable
-        #   Add 4 dimensions:
-        #   radar/lidar (encoded with 0/1)
-        #   intensity (for lidar)
-        #   vx (vx_comp)
-        #   vy (vy_comp: velocities for radar. Directions probably need to be adjusted for ego frame)
+                for i in range(3):
+                    points_ego_frame[i].append(filtered_points[i][point])
+                points_ego_frame[3].append(is_lidar)
+                if is_lidar:
+                    points_ego_frame[4].append(filtered_points[3][point])
+                    points_ego_frame[5].append(0)
+                    points_ego_frame[6].append(0)
+                else:
+                    points_ego_frame[4].append(0)
+                    points_ego_frame[5].append(filtered_points[8][point])
+                    points_ego_frame[6].append(filtered_points[9][point])
 
         label = this_annotation['category_name']
         return points_ego_frame, label
@@ -126,11 +132,14 @@ def print_empty_boxes_stats(dset):
             num_boxes_without_radar += 1
     print('There are {} annotations total.'.format(num_boxes))
     print('There are {} annotations without any lidar points.'.format(num_boxes_without_lidar))
-    print('That means the ratio of annotations without any lidar points to total annotations is {}'.format(num_boxes_without_lidar/num_boxes))
+    print('That means the ratio of annotations without any lidar points to total annotations is {}'.format(
+        num_boxes_without_lidar / num_boxes))
     print('There are {} annotations without any radar points.'.format(num_boxes_without_radar))
-    print('That means the ratio of annotations without any radar points to total annotations is {}'.format(num_boxes_without_radar/num_boxes))
+    print('That means the ratio of annotations without any radar points to total annotations is {}'.format(
+        num_boxes_without_radar / num_boxes))
     print('{} annotations contain no points at all!'.format(num_boxes_without_any))
-    print('That means the ratio of annotations without any points to total annotations is {}'.format(num_boxes_without_any/num_boxes))
+    print('That means the ratio of annotations without any points to total annotations is {}'.format(
+        num_boxes_without_any / num_boxes))
 
 
 dataset = NuScenesLoader(16, train=True)
