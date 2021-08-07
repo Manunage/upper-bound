@@ -19,20 +19,20 @@ print(dataroot)
 #             https://github.com/erikwijmans/Pointnet2_PyTorch/tree/master/pointnet2/data
 
 class NuScenesLoader(data.Dataset):
-    def __init__(self, num_points, root=dataroot, transforms=None, train=True, mini_testrun=True):
+    def __init__(self, num_points, root=os.environ['NUSCENES_PATH'], transforms=None, train=True, mini_testrun=False):
         super().__init__()
         self.root = root
         self.transforms = transforms
         self.num_points = num_points
         if mini_testrun:
-            self.dataset = NuScenes(version='v1.0-mini', dataroot=dataroot, verbose=True)
+            self.dataset = NuScenes(version='v1.0-mini', dataroot=self.root, verbose=True)
             if train:
                 pass
         else:
             if train:
-                self.dataset = NuScenes(version='v1.0-trainval', dataroot=dataroot, verbose=True)
+                self.dataset = NuScenes(version='v1.0-trainval', dataroot=self.root, verbose=True)
             else:
-                self.dataset = NuScenes(version='v1.0-test', dataroot=dataroot, verbose=True)
+                self.dataset = NuScenes(version='v1.0-test', dataroot=self.root, verbose=True)
             pass
 
     def __getitem__(self, idx):
@@ -116,12 +116,14 @@ class NuScenesLoader(data.Dataset):
 
 
 # Prints stats about boxes without any points in them
-def print_empty_boxes_stats(dset):
+def print_stats(dset):
     num_boxes = len(dset.dataset.sample_annotation)
     num_boxes_without_lidar = 0
     num_boxes_without_radar = 0
     num_boxes_without_any = 0
+    total_num_points = 0
     for annotation in dset.dataset.sample_annotation:
+        total_num_points = total_num_points + annotation['num_lidar_pts'] + annotation['num_radar_pts']
         if annotation['num_lidar_pts'] == 0 and annotation['num_radar_pts'] == 0:
             num_boxes_without_any += 1
             num_boxes_without_radar += 1
@@ -140,8 +142,10 @@ def print_empty_boxes_stats(dset):
     print('{} annotations contain no points at all!'.format(num_boxes_without_any))
     print('That means the ratio of annotations without any points to total annotations is {}'.format(
         num_boxes_without_any / num_boxes))
+    print('There are {} points total.'.format(total_num_points))
+    print('That means the average number of points per annotation is {}'.format(total_num_points/num_boxes))
 
 
 dataset = NuScenesLoader(16, train=True)
 
-# print_empty_boxes_stats(dataset)
+print_stats(dataset)
