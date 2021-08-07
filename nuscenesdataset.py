@@ -22,22 +22,20 @@ from nuscenes.utils.data_classes import LidarPointCloud, RadarPointCloud
 from nuscenes.utils.geometry_utils import points_in_box
 from pyquaternion import Quaternion
 
-######
-# Nuscenes-dataset loader for torch_points3d/datasets/classification
-######
 
-class NuScenesLoader(data.Dataset):
-    def __init__(self, num_points, root=os.environ['NUSCENES_PATH'], transforms=None, train=True):
-        super().__init__()
+class NuScenesLoader(InMemoryDataset):
+    def __init__(self, root, train=True, transform=None, pre_transform=None, pre_filter=None):
+        super(NuScenesLoader, self).__init__(root, transform, pre_transform, pre_filter)
         self.root = root
-        self.transforms = transforms
-        self.num_points = num_points
+        self.transforms = transform
         if train:
+            path = self.processed_paths[0]
             self.dataset = NuScenes(version='v1.0-trainval', dataroot=root, verbose=True)
         else:
+            self.processed_paths[1]
             self.dataset = NuScenes(version='v1.0-test', dataroot=root, verbose=True)
 
-    def __getitem__(self, idx):
+    def get_data(self, idx):
         this_annotation = self.dataset.sample_annotation[idx]
         sample_data_tokens = self.dataset.get('sample', this_annotation['sample_token'])['data']
         sensors = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT',
@@ -109,11 +107,32 @@ class NuScenesLoader(data.Dataset):
         label = this_annotation['category_name']
         return points_ego_frame, label
 
+    def process(self):
+        torch.save(self.process_set("train"), self.processed_paths[0])
+        torch.save(self.process_set("test"), self.processed_paths[1])
+
+    def process_set(self):
+        categories = []
+        for category in self.dataset.category:
+            categories.append(category['name'])
+
+        # TODO see modelnet
+        data_list = []
+        for i in len(self.dataset.sample_annotation):
+            data = Data(pos=raw[:, :3], norm=raw[:, 3:], y=torch.tensor([target]))
+            data_list.append(data)
+
+        if self.pre_filter is not None:
+            data_list = [d for d in data_list if self.pre_filter(d)]
+
+        if self.pre_transform is not None:
+            data_list = [self.pre_transform(d) for d in data_list]
+
+        return self.collate(data_list)
+
+
     def __len__(self):
         return len(self.dataset.sample_annotation)
-
-    def set_num_points(self, pts):
-        self.num_points = min(int(1e4), pts)
 
 
 class NuScenesDataset(BaseDataset):
