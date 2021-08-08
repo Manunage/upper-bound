@@ -24,16 +24,28 @@ from pyquaternion import Quaternion
 
 
 class NuScenesLoader(InMemoryDataset):
+    def download(self):
+        return []
+
+    @property
+    def processed_file_names(self):
+        # TODO
+        pass
+
+    @property
+    def raw_file_names(self):
+        return []
+
     def __init__(self, root, train=True, transform=None, pre_transform=None, pre_filter=None):
         super(NuScenesLoader, self).__init__(root, transform, pre_transform, pre_filter)
         self.root = root
         self.transforms = transform
         if train:
             path = self.processed_paths[0]
-            self.dataset = NuScenes(version='v1.0-trainval', dataroot=root, verbose=True)
+            self.dataset = NuScenes(version='v1.0-trainval', dataroot=self.root, verbose=True)
         else:
             self.processed_paths[1]
-            self.dataset = NuScenes(version='v1.0-test', dataroot=root, verbose=True)
+            self.dataset = NuScenes(version='v1.0-test', dataroot=self.root, verbose=True)
 
     def get_data(self, idx):
         this_annotation = self.dataset.sample_annotation[idx]
@@ -41,7 +53,7 @@ class NuScenesLoader(InMemoryDataset):
         sensors = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT',
                    'LIDAR_TOP']
 
-        # FIELDS x y z rad/lid intensity vx vy
+        # FIELDS x y z is_lidar intensity vx vy
         points_ego_frame = [[], [], [], [], [], [], []]
         for sensor_name in sensors:
             this_sample_data = self.dataset.get('sample_data', sample_data_tokens[sensor_name])
@@ -90,7 +102,7 @@ class NuScenesLoader(InMemoryDataset):
             # print(filtered_points)
 
             # add points from this sensor to the points from the other sensors (in ego pose frame)
-            # points_ego_frame FIELDS: x y z rad/lid intensity vx vy
+            # points_ego_frame FIELDS: x y z is_lidar intensity vx vy
             for point in range(len(filtered_points[0])):
                 for i in range(3):
                     points_ego_frame[i].append(filtered_points[i][point])
@@ -116,11 +128,13 @@ class NuScenesLoader(InMemoryDataset):
         for category in self.dataset.category:
             categories.append(category['name'])
 
-        # TODO see modelnet
         data_list = []
-        for i in len(self.dataset.sample_annotation):
-            data = Data(pos=raw[:, :3], norm=raw[:, 3:], y=torch.tensor([target]))
-            data_list.append(data)
+        for i in len(self):
+            points_array, sample_category = self.get_data(i)
+            target = categories.index(sample_category)
+            points_array = np.transpose(points_array)
+            data_obj = Data(x=points_array, y=torch.tensor([target]))
+            data_list.append(data_obj)
 
         if self.pre_filter is not None:
             data_list = [d for d in data_list if self.pre_filter(d)]
@@ -129,7 +143,6 @@ class NuScenesLoader(InMemoryDataset):
             data_list = [self.pre_transform(d) for d in data_list]
 
         return self.collate(data_list)
-
 
     def __len__(self):
         return len(self.dataset.sample_annotation)
