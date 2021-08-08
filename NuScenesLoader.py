@@ -60,10 +60,10 @@ class NuScenesLoader(data.Dataset):
             # Get points (sensor coordinate frame)
             filename = this_sample_data['filename']
             if this_sample_data['sensor_modality'] == 'radar':
-                pointcloud = RadarPointCloud.from_file(osp.join(dataroot, filename))
+                pointcloud = RadarPointCloud.from_file(osp.join(self.root, filename))
                 is_lidar = 0
             else:
-                pointcloud = LidarPointCloud.from_file(osp.join(dataroot, filename))
+                pointcloud = LidarPointCloud.from_file(osp.join(self.root, filename))
                 is_lidar = 1
 
             # Transform pointcloud from sensor coordinate frame to ego pose frame
