@@ -18,10 +18,9 @@ os.environ["PYVISTA_USE_PANEL"] = "true"
 os.environ["PYVISTA_AUTO_CLOSE"] = "false"
 os.system("Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &")
 
-nusc_path = os.environ['NUSCENES_PATH']
-
 USE_NORMAL = True
 DIR = os.path.dirname(os.path.realpath(__file__))  # data will go in DIR/data.
+dataroot = os.path.join(DIR, "data/nuscenes")
 
 # The dataset will be downloaded the first time this cell is run
 from torch_points3d.datasets.classification.nuscenesdataset import NuScenesLoader
@@ -29,8 +28,8 @@ import torch_points3d.core.data_transform as T3D
 import torch_geometric.transforms as T
 
 pre_transform = T.Compose([T.NormalizeScale(), T3D.GridSampling3D(0.02)])
-dataset = NuScenesLoader(train=True, transform=None,
-                          pre_transform=pre_transform, pre_filter=None)
+dataset = NuScenesLoader(root=dataroot, train=True, transform=None,
+                         pre_transform=pre_transform, pre_filter=None)
 
 
 class RSConvClassifier(torch.nn.Module):
@@ -80,7 +79,7 @@ BATCH_SIZE = 12
 
 transform = T.FixedPoints(2048)
 dataset = NuScenesLoader(train=True, transform=transform,
-                          pre_transform=pre_transform, pre_filter=None)
+                         pre_transform=pre_transform, pre_filter=None)
 
 collate_function = lambda datalist: SimpleBatch.from_data_list(datalist)
 train_loader = torch.utils.data.DataLoader(
@@ -205,11 +204,12 @@ def test_epoch(device):
             )
             iter_data_time = time.time()
 
+
 EPOCHS = 50
 for i in range(EPOCHS):
-  print("=========== EPOCH %i ===========" % i)
-  time.sleep(0.5)
-  train_epoch('cuda')
-  tracker.publish(i)
-  test_epoch('cuda')
-  tracker.publish(i)
+    print("=========== EPOCH %i ===========" % i)
+    time.sleep(0.5)
+    train_epoch('cuda')
+    tracker.publish(i)
+    test_epoch('cuda')
+    tracker.publish(i)

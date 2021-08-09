@@ -122,9 +122,15 @@ def print_stats(dset):
     num_boxes_without_radar = 0
     num_boxes_without_any = 0
     total_num_points = 0
-    for annotation in dset.dataset.sample_annotation:
-        total_num_points = total_num_points + annotation['num_lidar_pts'] + annotation['num_radar_pts']
-        if annotation['num_lidar_pts'] == 0 and annotation['num_radar_pts'] == 0:
+    max_points_in_one_annotation = 0
+    points_numbers = []
+    for index, annotation in enumerate(dset.dataset.sample_annotation):
+        points_in_annotation = annotation['num_lidar_pts'] + annotation['num_radar_pts']
+        total_num_points = total_num_points + points_in_annotation
+        points_numbers.append(points_in_annotation)
+        if points_in_annotation > max_points_in_one_annotation:
+            max_points_in_one_annotation = points_in_annotation
+        if points_in_annotation == 0:
             num_boxes_without_any += 1
             num_boxes_without_radar += 1
             num_boxes_without_lidar += 1
@@ -132,20 +138,59 @@ def print_stats(dset):
             num_boxes_without_lidar += 1
         elif annotation['num_radar_pts'] == 0:
             num_boxes_without_radar += 1
+
     print('There are {} annotations total.'.format(num_boxes))
+
     print('There are {} annotations without any lidar points.'.format(num_boxes_without_lidar))
     print('That means the ratio of annotations without any lidar points to total annotations is {}'.format(
         num_boxes_without_lidar / num_boxes))
+
     print('There are {} annotations without any radar points.'.format(num_boxes_without_radar))
     print('That means the ratio of annotations without any radar points to total annotations is {}'.format(
         num_boxes_without_radar / num_boxes))
+
     print('{} annotations contain no points at all!'.format(num_boxes_without_any))
     print('That means the ratio of annotations without any points to total annotations is {}'.format(
         num_boxes_without_any / num_boxes))
+
     print('There are {} points total.'.format(total_num_points))
-    print('That means the average number of points per annotation is {}'.format(total_num_points/num_boxes))
+    print('That means the average number of points per annotation is {}'.format(total_num_points / num_boxes))
+
+    print('The maximum number of points in one annotation is {}'.format(max_points_in_one_annotation))
+
+    # TODO plot distribution
+
+
+def lidar_stats(dset):
+    # FIELDS distance intensity
+    point_stats = [[], []]
+    # Number of points to look at. One million takes up to half a minute
+    point_limit = 1000000
+
+    point_counter = 0
+    for sample_data in dset.dataset.sample_data:  # Get points (sensor coordinate frame)
+        if point_counter < point_limit:
+            if sample_data['sensor_modality'] == 'lidar' and sample_data['is_key_frame']:
+                filename = sample_data['filename']
+                pointcloud = LidarPointCloud.from_file(osp.join(dset.root, filename))
+                points = pointcloud.points
+                for point_index in range(len(pointcloud.points[0])):
+                    point_counter = point_counter + 1
+                    x = points[0][point_index]
+                    y = points[1][point_index]
+                    z = points[2][point_index]
+                    distance = np.sqrt(np.power(x, 2) + np.power(y, 2) + np.power(z, 2))
+                    intensity = points[3][point_index]
+                    point_stats[0].append(distance)
+                    point_stats[1].append(intensity)
+
+                # TODO plot distribution
+
+    print(point_stats)
 
 
 dataset = NuScenesLoader(16, train=True)
 
 print_stats(dataset)
+
+lidar_stats(dataset)

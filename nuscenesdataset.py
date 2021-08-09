@@ -25,27 +25,32 @@ from pyquaternion import Quaternion
 
 class NuScenesLoader(InMemoryDataset):
     def download(self):
-        return []
+        pass
 
     @property
     def processed_file_names(self):
         # TODO
-        pass
+        return ["filler"]
 
     @property
     def raw_file_names(self):
-        return []
+        return ["filler"]
 
     def __init__(self, root, train=True, transform=None, pre_transform=None, pre_filter=None):
+        self.nusc_source = os.environ['NUSCENES_SOURCE']
+        if train:
+            self.dataset = NuScenes(version='v1.0-trainval', dataroot=self.nusc_source, verbose=True)
+        else:
+            self.dataset = NuScenes(version='v1.0-test', dataroot=self.nusc_source, verbose=True)
         super(NuScenesLoader, self).__init__(root, transform, pre_transform, pre_filter)
         self.root = root
         self.transforms = transform
         if train:
             path = self.processed_paths[0]
-            self.dataset = NuScenes(version='v1.0-trainval', dataroot=self.root, verbose=True)
         else:
-            self.processed_paths[1]
-            self.dataset = NuScenes(version='v1.0-test', dataroot=self.root, verbose=True)
+            path = self.processed_paths[1]
+
+        self.data, self.slices = torch.load(path)
 
     def get_data(self, idx):
         this_annotation = self.dataset.sample_annotation[idx]
@@ -71,10 +76,10 @@ class NuScenesLoader(InMemoryDataset):
             # Get points (sensor coordinate frame)
             filename = this_sample_data['filename']
             if this_sample_data['sensor_modality'] == 'radar':
-                pointcloud = RadarPointCloud.from_file(osp.join(self.root, filename))
+                pointcloud = RadarPointCloud.from_file(osp.join(self.nusc_source, filename))
                 is_lidar = 0
             else:
-                pointcloud = LidarPointCloud.from_file(osp.join(self.root, filename))
+                pointcloud = LidarPointCloud.from_file(osp.join(self.nusc_source, filename))
                 is_lidar = 1
 
             # Transform pointcloud from sensor coordinate frame to ego pose frame
@@ -123,18 +128,19 @@ class NuScenesLoader(InMemoryDataset):
         torch.save(self.process_set("train"), self.processed_paths[0])
         torch.save(self.process_set("test"), self.processed_paths[1])
 
-    def process_set(self):
+    def process_set(self, dataset):
         categories = []
         for category in self.dataset.category:
             categories.append(category['name'])
 
         data_list = []
-        for i in len(self):
+        for i in range(len(self)):
+            print("Currently processing point cloud number {} of {}".format(i, len(self)))
             points_array, sample_category = self.get_data(i)
             target = categories.index(sample_category)
             points_array = np.transpose(points_array)
-            data_obj = Data(x=points_array, y=torch.tensor([target]))
-            data_list.append(data_obj)
+            data = Data(x=points_array, y=torch.tensor([target]))
+            data_list.append(data)
 
         if self.pre_filter is not None:
             data_list = [d for d in data_list if self.pre_filter(d)]
@@ -150,8 +156,8 @@ class NuScenesLoader(InMemoryDataset):
 
 class NuScenesDataset(BaseDataset):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, dataset_opt):
+        super().__init__(dataset_opt)
 
         self.train_dataset = NuScenesLoader(
             self._data_path,
