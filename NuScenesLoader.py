@@ -116,9 +116,12 @@ class NuScenesLoader(data.Dataset):
         self.num_points = min(int(1e4), pts)
 
 
+dataset = NuScenesLoader(16, train=True, mini_testrun=False)
+
 from collections import Counter
 from matplotlib.pyplot import hist, hist2d, scatter
 from matplotlib import pyplot as plt
+
 
 # Prints stats about boxes without any points in them
 def print_stats(dset):
@@ -146,7 +149,7 @@ def print_stats(dset):
 
     frequency_counter = Counter(points_numbers)
     frequency = []
-    for key in range(max_points_in_one_annotation+1):
+    for key in range(max_points_in_one_annotation + 1):
         value = frequency_counter.get(key)
         frequency.append(0) if value is None else frequency.append(value)
 
@@ -173,7 +176,7 @@ def print_stats(dset):
 
     max_value = 500
     bins = list(range(max_value))
-    bins.append(max_value-0.0001)
+    bins.append(max_value - 0.0001)
     histogram = hist(points_numbers, bins=bins, log=True, histtype='bar')
 
     plt.title('Point frequency distribution (annotations)')
@@ -181,11 +184,14 @@ def print_stats(dset):
     plt.ylabel('Occurrences')
 
 
+print_stats(dataset)
+
+
 def lidar_stats(dset):
     # FIELDS distance intensity
     point_stats = [[], []]
     # Number of points to look at. One million takes up to half a minute
-    point_limit = 100000
+    point_limit = 1000000
 
     point_counter = 0
     for sample_data in dset.dataset.sample_data:  # Get points (sensor coordinate frame)
@@ -206,10 +212,13 @@ def lidar_stats(dset):
 
     distance, intensity = point_stats[0], point_stats[1]
 
-    #histogram = hist2d(x=distance, y=intensity, bins=25, cmin=20, range=((0, 100), (0, 100)))
-    scatterplot = scatter(x=distance, y=intensity, s=0.5)
+    # histogram = hist2d(x=distance, y=intensity, bins=256, cmin=10)
+    histogram = hist2d(x=distance, y=intensity, bins=32, cmin=5)
+    # histogram = hist2d(x=distance, y=intensity, bins=64, cmin=5, range=((0, 10), (0, 250)))
+    # scatterplot = scatter(x=distance, y=intensity, s=0.1, alpha=0.5)
+    plt.title('Lidar points: intensity and distance')
+    plt.xlabel('Distance from sensor')
+    plt.ylabel('Intensity')
 
-dataset = NuScenesLoader(16, train=True, mini_testrun=False)
 
-# print_stats(dataset)
-# lidar_stats(dataset)
+lidar_stats(dataset)
