@@ -212,13 +212,19 @@ def lidar_stats(dset):
 
     distance, intensity = point_stats[0], point_stats[1]
 
+    histogram = hist(intensity, bins=100, log=True)
+    plt.title('Intensity frequency distribution')
+    plt.xlabel('Intensity')
+    plt.ylabel('Occurrences')
+
     # histogram = hist2d(x=distance, y=intensity, bins=256, cmin=10)
-    histogram = hist2d(x=distance, y=intensity, bins=32, cmin=5)
+    # histogram = hist2d(x=distance, y=intensity, bins=32, cmin=5)
     # histogram = hist2d(x=distance, y=intensity, bins=64, cmin=5, range=((0, 10), (0, 250)))
     # scatterplot = scatter(x=distance, y=intensity, s=0.1, alpha=0.5)
-    plt.title('Lidar points: intensity and distance')
-    plt.xlabel('Distance from sensor')
-    plt.ylabel('Intensity')
+
+    # plt.title('Lidar points: intensity and distance')
+    # plt.xlabel('Distance from sensor')
+    # plt.ylabel('Intensity')
 
 
 lidar_stats(dataset)
