@@ -4,7 +4,7 @@ import shutil
 import torch
 
 from torch_geometric.datasets import ModelNet
-from torch_geometric.data import DataLoader, InMemoryDataset, extract_zip, Data
+from torch_geometric.data import DataLoader, Dataset, extract_zip, Data
 import torch_geometric.transforms as T
 from torch_geometric.io import read_txt_array
 
@@ -23,7 +23,10 @@ from nuscenes.utils.geometry_utils import points_in_box
 from pyquaternion import Quaternion
 
 
-class NuScenesLoader(InMemoryDataset):
+class NuScenesLoader(Dataset):
+    def len(self):
+        return self.__len__()
+
     def download(self):
         pass
 
@@ -133,25 +136,28 @@ class NuScenesLoader(InMemoryDataset):
         for category in self.dataset.category:
             categories.append(category['name'])
 
-        data_list = []
         for i in range(len(self)):
             print("Currently processing point cloud number {} of {}".format(i, len(self)))
             points_array, sample_category = self.get_data(i)
+
             target = categories.index(sample_category)
             points_array = np.transpose(points_array)
             data = Data(x=points_array, y=torch.tensor([target]))
-            data_list.append(data)
 
-        if self.pre_filter is not None:
-            data_list = [d for d in data_list if self.pre_filter(d)]
+            if self.pre_filter is not None and not self.pre_filter(data):
+                continue
 
-        if self.pre_transform is not None:
-            data_list = [self.pre_transform(d) for d in data_list]
+            if self.pre_transform is not None:
+                data = self.pre_transform(data)
 
-        return self.collate(data_list)
+            torch.save(data, osp.join(self.processed_dir, 'data_{}.pt'.format(i)))
 
     def __len__(self):
         return len(self.dataset.sample_annotation)
+
+    def get(self, idx):
+        data = torch.load(osp.join(self.processed_dir, 'data_{}.pt'.format(idx)))
+        return data
 
 
 class NuScenesDataset(BaseDataset):

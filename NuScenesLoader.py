@@ -43,7 +43,6 @@ class NuScenesLoader(data.Dataset):
                    'LIDAR_TOP']
 
         # FIELDS x y z rad/lid intensity vx vy
-        # TODO Maybe points_ego_frame as record array?
         points_ego_frame = [[], [], [], [], [], [], []]
         for sensor_name in sensors:
             this_sample_data = self.dataset.get('sample_data', sample_data_tokens[sensor_name])
