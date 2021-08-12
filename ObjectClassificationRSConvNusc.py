@@ -28,8 +28,24 @@ import torch_points3d.core.data_transform as T3D
 import torch_geometric.transforms as T
 
 pre_transform = T.Compose([T.NormalizeScale(), T3D.GridSampling3D(0.02)])
+
+
+def is_valid_item(data):
+    if data is None:
+        return False
+    elif data.x is None or data.y is None:
+        return False
+    elif len(data.x) == 0:
+        return False
+    elif len(data.x[0]) == 0:
+        return False
+    else:
+        return True
+
+
+pre_filter = is_valid_item
 dataset = NuScenesLoader(root=dataroot, train=True, transform=None,
-                         pre_transform=pre_transform, pre_filter=None)
+                         pre_transform=None, pre_filter=pre_filter)
 
 
 class RSConvClassifier(torch.nn.Module):
