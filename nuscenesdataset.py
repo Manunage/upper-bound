@@ -33,8 +33,11 @@ class NuScenesLoader(Dataset):
 
     @property
     def processed_file_names(self):
-        # TODO
-        return ["filler"]
+        #file_names = []
+        #for i in range(self.__len__()):
+        #    file_names.append('data_{}.pt'.format(i))
+        #return file_names
+        return ['data_0.pt', 'data_12.pt', 'fake_name.pt']
 
     @property
     def raw_file_names(self):
@@ -42,31 +45,45 @@ class NuScenesLoader(Dataset):
 
     def __init__(self, root, train=True, transform=None, pre_transform=None, pre_filter=None):
         self.nusc_source = os.environ['NUSCENES_SOURCE']
+        self.root = root
         if train:
             self.dataset = NuScenes(version='v1.0-trainval', dataroot=self.nusc_source, verbose=True)
         else:
             self.dataset = NuScenes(version='v1.0-test', dataroot=self.nusc_source, verbose=True)
         super(NuScenesLoader, self).__init__(root, transform, pre_transform, pre_filter)
-        self.root = root
         self.transforms = transform
         if train:
             path = self.processed_paths[0]
         else:
             path = self.processed_paths[1]
 
-        self.data, self.slices = torch.load(path)
+        #self.data, self.slices = torch.load(path)
 
     def get_data(self, idx):
         try:
             this_annotation = self.dataset.sample_annotation[idx]
+            # FIELDS x y z is_lidar intensity vx vy
+            points_ego_frame = [[], [], [], [], [], [], []]
+            label = this_annotation['category_name']
+            if this_annotation['num_lidar_pts'] + this_annotation['num_radar_pts'] == 0:
+                return points_ego_frame, label
             sample_data_tokens = self.dataset.get('sample', this_annotation['sample_token'])['data']
             sensors = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT',
                        'LIDAR_TOP']
 
-            # FIELDS x y z is_lidar intensity vx vy
-            points_ego_frame = [[], [], [], [], [], [], []]
+
             for sensor_name in sensors:
                 this_sample_data = self.dataset.get('sample_data', sample_data_tokens[sensor_name])
+
+                # Get points (sensor coordinate frame)
+                filename = this_sample_data['filename']
+                if this_sample_data['sensor_modality'] == 'radar':
+                    pointcloud = RadarPointCloud.from_file(osp.join(self.nusc_source, filename))
+                    is_lidar = 0
+                else:
+                    pointcloud = LidarPointCloud.from_file(osp.join(self.nusc_source, filename))
+                    is_lidar = 1
+
                 this_calibrated_sensor = self.dataset.get('calibrated_sensor', this_sample_data['calibrated_sensor_token'])
 
                 # Get box (sensor coordinate frame)
@@ -78,14 +95,6 @@ class NuScenesLoader(Dataset):
                 box.rotate(Quaternion(this_calibrated_sensor['rotation']))
                 box.translate(np.array(this_calibrated_sensor['translation']))
 
-                # Get points (sensor coordinate frame)
-                filename = this_sample_data['filename']
-                if this_sample_data['sensor_modality'] == 'radar':
-                    pointcloud = RadarPointCloud.from_file(osp.join(self.nusc_source, filename))
-                    is_lidar = 0
-                else:
-                    pointcloud = LidarPointCloud.from_file(osp.join(self.nusc_source, filename))
-                    is_lidar = 1
 
                 # Transform pointcloud from sensor coordinate frame to ego pose frame
                 rotation_matrix = Quaternion(this_calibrated_sensor['rotation']).rotation_matrix
@@ -126,10 +135,9 @@ class NuScenesLoader(Dataset):
                         points_ego_frame[5].append(filtered_points[8][point])
                         points_ego_frame[6].append(filtered_points[9][point])
 
-            label = this_annotation['category_name']
             return points_ego_frame, label
         except FileNotFoundError:
-            return None
+            return [[], [], [], [], [], [], []], ''
 
     def process(self):
         torch.save(self.process_set("train"), self.processed_paths[0])
@@ -141,6 +149,8 @@ class NuScenesLoader(Dataset):
             categories.append(category['name'])
 
         for i in range(len(self)):
+            if i > 1160000:
+                break
             print("Currently processing point cloud number {} of {}".format(i, len(self)))
             try:
                 if not Path(osp.join(self.processed_dir, 'data_{}.pt'.format(i))).exists():

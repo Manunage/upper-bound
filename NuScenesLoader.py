@@ -183,7 +183,7 @@ def print_stats(dset):
     plt.ylabel('Occurrences')
 
 
-print_stats(dataset)
+# print_stats(dataset)
 
 
 def lidar_stats(dset):
@@ -226,4 +226,4 @@ def lidar_stats(dset):
     # plt.ylabel('Intensity')
 
 
-lidar_stats(dataset)
+# lidar_stats(dataset)

@@ -45,7 +45,7 @@ def is_valid_item(data):
 
 pre_filter = is_valid_item
 dataset = NuScenesLoader(root=dataroot, train=True, transform=None,
-                         pre_transform=None, pre_filter=pre_filter)
+                         pre_transform=None, pre_filter=None)
 
 
 class RSConvClassifier(torch.nn.Module):
