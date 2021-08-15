@@ -19,7 +19,8 @@ os.environ["PYVISTA_AUTO_CLOSE"] = "false"
 os.system("Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &")
 
 USE_NORMAL = True
-DIR = os.path.dirname(os.path.realpath(__file__))  # data will go in DIR/data.
+# DIR = os.path.dirname(os.path.realpath(__file__))  # data will go in DIR/data.
+DIR = '/home/mnagel/PycharmProjects/torch-points3d'
 dataroot = os.path.join(DIR, "data/nuscenes")
 
 # The dataset will be downloaded the first time this cell is run
@@ -30,28 +31,13 @@ import torch_geometric.transforms as T
 pre_transform = T.Compose([T.NormalizeScale(), T3D.GridSampling3D(0.02)])
 
 
-def is_valid_item(data):
-    if data is None:
-        return False
-    elif data.x is None or data.y is None:
-        return False
-    elif len(data.x) == 0:
-        return False
-    elif len(data.x[0]) == 0:
-        return False
-    else:
-        return True
-
-
-pre_filter = is_valid_item
-dataset = NuScenesLoader(root=dataroot, train=True, transform=None,
-                         pre_transform=None, pre_filter=None)
+# dataset = NuScenesLoader(train=True, transforms=None)
 
 
 class RSConvClassifier(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.encoder = RSConv("encoder", input_nc=3 * USE_NORMAL, output_nc=23, num_layers=4)
+        self.encoder = RSConv("encoder", input_nc=7, output_nc=23, num_layers=4)
         self.log_softmax = torch.nn.LogSoftmax(dim=-1)
 
     @property
@@ -93,14 +79,41 @@ from torch_points3d.datasets.batch import SimpleBatch
 NUM_WORKERS = 4
 BATCH_SIZE = 12
 
-transform = T.FixedPoints(2048)
-dataset = NuScenesLoader(train=True, transform=transform,
-                         pre_transform=pre_transform, pre_filter=None)
+
+def is_valid_item(data):
+    if data is None:
+        return False
+    elif data.x is None or data.x.size(0) <= 1:
+        return False
+    else:
+        return True
+
+
+pre_filter = is_valid_item
+
+transform = T.FixedPoints(128, allow_duplicates=True)
+dataset = NuScenesLoader(train=True, pre_filter=is_valid_item, transform=transform)
+
+
+def get_good_indices(dataset):
+    good_idxs = []
+    for idx in range(len(dataset)):
+        this_annotation = dataset.dataset.sample_annotation[idx]
+        number_of_points = this_annotation['num_lidar_pts'] + this_annotation['num_radar_pts']
+        if number_of_points >= 3:
+            good_idxs.append(idx)
+    return good_idxs
+
+
+indices = get_good_indices(dataset)
+
+dataset = torch.utils.data.Subset(dataset=dataset, indices=indices)
 
 collate_function = lambda datalist: SimpleBatch.from_data_list(datalist)
 train_loader = torch.utils.data.DataLoader(
     dataset,
     batch_size=BATCH_SIZE,
+    sampler=None,
     shuffle=True,
     num_workers=NUM_WORKERS,
     collate_fn=collate_function
@@ -112,33 +125,13 @@ task: classification
 class: nuscenesdataset.NuScenesDataset
 name: nuscenesdataset
 dataroot: %s
-number: %s
-pre_transforms:
-    - transform: NormalizeScale
-    - transform: GridSampling3D
-      lparams: [0.02]
 train_transforms:
     - transform: FixedPoints
-      lparams: [2048]
-    - transform: RandomNoise
-    - transform: RandomRotate
-      params:
-        degrees: 180
-        axis: 2
-    - transform: AddFeatsByKeys
-      params:
-        feat_names: [norm]
-        list_add_to_x: [%r]
-        delete_feats: [True]
+      lparams: [128]
 test_transforms:
     - transform: FixedPoints
-      lparams: [2048]
-    - transform: AddFeatsByKeys
-      params:
-        feat_names: [norm]
-        list_add_to_x: [%r]
-        delete_feats: [True]
-""" % (os.environ['NUSCENES_PATH'], USE_NORMAL, USE_NORMAL)
+      lparams: [128]
+""" % (os.path.join(DIR, "data"))
 
 from omegaconf import OmegaConf
 

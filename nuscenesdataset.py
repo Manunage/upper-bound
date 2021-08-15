@@ -24,53 +24,39 @@ from nuscenes.utils.geometry_utils import points_in_box
 from pyquaternion import Quaternion
 
 
-class NuScenesLoader(Dataset):
-    def len(self):
-        return self.__len__()
-
-    def download(self):
-        pass
-
-    @property
-    def processed_file_names(self):
-        #file_names = []
-        #for i in range(self.__len__()):
-        #    file_names.append('data_{}.pt'.format(i))
-        #return file_names
-        return ['data_0.pt', 'data_12.pt', 'fake_name.pt']
-
-    @property
-    def raw_file_names(self):
-        return ["filler"]
-
-    def __init__(self, root, train=True, transform=None, pre_transform=None, pre_filter=None):
-        self.nusc_source = os.environ['NUSCENES_SOURCE']
+class NuScenesLoader(data.Dataset):
+    def __init__(self, root=None, transform=None, pre_filter=None, train=True, mini_testrun=False):
+        super().__init__()
         self.root = root
-        if train:
-            self.dataset = NuScenes(version='v1.0-trainval', dataroot=self.nusc_source, verbose=True)
+        self.nusc_source = os.environ['NUSCENES_SOURCE']
+        self.transform = transform
+        self.pre_filter = pre_filter
+        if mini_testrun:
+            self.dataset = NuScenes(version='v1.0-mini', dataroot=self.root, verbose=True)
+            if train:
+                pass
         else:
-            self.dataset = NuScenes(version='v1.0-test', dataroot=self.nusc_source, verbose=True)
-        super(NuScenesLoader, self).__init__(root, transform, pre_transform, pre_filter)
-        self.transforms = transform
-        if train:
-            path = self.processed_paths[0]
-        else:
-            path = self.processed_paths[1]
+            if train:
+                self.dataset = NuScenes(version='v1.0-trainval', dataroot=self.nusc_source, verbose=True)
+            else:
+                self.dataset = NuScenes(version='v1.0-test', dataroot=self.nusc_source, verbose=True)
 
-        #self.data, self.slices = torch.load(path)
+        self.categories = []
+        for category in self.dataset.category:
+            self.categories.append(category['name'])
 
-    def get_data(self, idx):
+    def __getitem__(self, idx):
         try:
             this_annotation = self.dataset.sample_annotation[idx]
             # FIELDS x y z is_lidar intensity vx vy
             points_ego_frame = [[], [], [], [], [], [], []]
-            label = this_annotation['category_name']
+            sample_category = this_annotation['category_name']
+            target = self.categories.index(sample_category)
             if this_annotation['num_lidar_pts'] + this_annotation['num_radar_pts'] == 0:
-                return points_ego_frame, label
+                return Data(x=torch.tensor([]), y=torch.tensor([target]))
             sample_data_tokens = self.dataset.get('sample', this_annotation['sample_token'])['data']
             sensors = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT',
                        'LIDAR_TOP']
-
 
             for sensor_name in sensors:
                 this_sample_data = self.dataset.get('sample_data', sample_data_tokens[sensor_name])
@@ -84,7 +70,8 @@ class NuScenesLoader(Dataset):
                     pointcloud = LidarPointCloud.from_file(osp.join(self.nusc_source, filename))
                     is_lidar = 1
 
-                this_calibrated_sensor = self.dataset.get('calibrated_sensor', this_sample_data['calibrated_sensor_token'])
+                this_calibrated_sensor = self.dataset.get('calibrated_sensor',
+                                                          this_sample_data['calibrated_sensor_token'])
 
                 # Get box (sensor coordinate frame)
                 _, boxes, _ = self.dataset.get_sample_data(sample_data_token=sample_data_tokens[sensor_name],
@@ -94,7 +81,6 @@ class NuScenesLoader(Dataset):
                 # Transform box from sensor coordinate frame to ego pose frame
                 box.rotate(Quaternion(this_calibrated_sensor['rotation']))
                 box.translate(np.array(this_calibrated_sensor['translation']))
-
 
                 # Transform pointcloud from sensor coordinate frame to ego pose frame
                 rotation_matrix = Quaternion(this_calibrated_sensor['rotation']).rotation_matrix
@@ -135,50 +121,25 @@ class NuScenesLoader(Dataset):
                         points_ego_frame[5].append(filtered_points[8][point])
                         points_ego_frame[6].append(filtered_points[9][point])
 
-            return points_ego_frame, label
+            points_ego_frame = np.transpose(points_ego_frame)
+            data = Data(x=torch.tensor(points_ego_frame), y=torch.tensor([target]))
+
+            if self.transform:
+                data = self.transform(data)
+
+            if self.pre_filter is not None and not self.pre_filter(data):
+                print('ejected {}'.format(idx))
+                return None
+
+            return data
+
         except FileNotFoundError:
-            return [[], [], [], [], [], [], []], ''
-
-    def process(self):
-        torch.save(self.process_set("train"), self.processed_paths[0])
-        torch.save(self.process_set("test"), self.processed_paths[1])
-
-    def process_set(self, dataset):
-        categories = []
-        for category in self.dataset.category:
-            categories.append(category['name'])
-
-        for i in range(len(self)):
-            if i > 1160000:
-                break
-            print("Currently processing point cloud number {} of {}".format(i, len(self)))
-            try:
-                if not Path(osp.join(self.processed_dir, 'data_{}.pt'.format(i))).exists():
-                    points_array, sample_category = self.get_data(i)
-
-                    target = categories.index(sample_category)
-                    points_array = np.transpose(points_array)
-                    data = Data(x=points_array, y=torch.tensor([target]))
-
-                    if self.pre_filter is not None and not self.pre_filter(data):
-                        print("File number {} is filtered out (invalid, maybe no points).".format(i))
-                        continue
-
-                    if self.pre_transform is not None:
-                        data = self.pre_transform(data)
-
-                    torch.save(data, osp.join(self.processed_dir, 'data_{}.pt'.format(i)))
-                else:
-                    print("File number {} is skipped (already exists).".format(i))
-            except TypeError:
-                print("File number {} is skipped (data not found).".format(i))
+            # Wonky error handling (Just take next valid item
+            return self.__getitem__(idx + 1)
+            # return Data(x=torch.tensor([]), y=torch.tensor([-1]))
 
     def __len__(self):
         return len(self.dataset.sample_annotation)
-
-    def get(self, idx):
-        data = torch.load(osp.join(self.processed_dir, 'data_{}.pt'.format(idx)))
-        return data
 
 
 class NuScenesDataset(BaseDataset):
@@ -192,12 +153,28 @@ class NuScenesDataset(BaseDataset):
             transform=self.train_transform,
             pre_transform=self.pre_transform,
         )
+
+        indices = self.get_good_indices(self.train_dataset)
+        self.train_dataset = torch.utils.data.Subset(dataset=self.train_dataset, indices=indices)
+
         self.test_dataset = NuScenesLoader(
             self._data_path,
             train=False,
             transform=self.test_transform,
             pre_transform=self.pre_transform,
         )
+
+        indices = self.get_good_indices(self.test_dataset)
+        self.test_dataset = torch.utils.data.Subset(dataset=self.test_dataset, indices=indices)
+
+    def get_good_indices(dataset):
+        good_idxs = []
+        for idx in range(len(dataset)):
+            this_annotation = dataset.dataset.sample_annotation[idx]
+            number_of_points = this_annotation['num_lidar_pts'] + this_annotation['num_radar_pts']
+            if number_of_points >= 3:
+                good_idxs.append(idx)
+        return good_idxs
 
     def get_tracker(self, wandb_log: bool, tensorboard_log: bool):
         """Factory method for the tracker
