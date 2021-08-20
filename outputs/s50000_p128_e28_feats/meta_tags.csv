@@ -1,0 +1,14 @@
+key,value
+optimizer.weight_decay,0.0
+optimizer.lr,0.001
+optimizer.lr_decay,0.7
+optimizer.bn_momentum,0.5
+optimizer.bnm_decay,0.5
+optimizer.decay_step,20000.0
+task_model.class,pointnet2.models.PointNet2ClassificationSSG
+task_model.name,cls-ssg
+model.use_xyz,True
+distrib_backend,dp
+num_points,128
+epochs,200
+batch_size,32
